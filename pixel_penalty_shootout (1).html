@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пиксельный Пенальти Про - Симулятор</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Press Start 2P', monospace;
+            background-color: #090d16;
+            color: #f8fafc;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .pixelated {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { text-shadow: 0 0 10px #22c55e, 0 0 20px #22c55e; }
+            50% { text-shadow: 0 0 2px #22c55e, 0 0 5px #22c55e; }
+        }
+        .animate-glow {
+            animation: pulseGlow 1.5s infinite;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between min-h-screen p-2 md:p-4 overflow-x-hidden">
+
+    <header class="w-full max-w-4xl flex flex-col sm:flex-row justify-between items-center bg-slate-900 border-4 border-slate-700 rounded-lg p-3 shadow-xl mb-3 gap-2">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl animate-bounce">⚽</span>
+            <div>
+                <h1 class="text-xs md:text-sm text-yellow-400 tracking-wider">ПИКСЕЛЬНЫЙ ПЕНАЛЬТИ ПРО</h1>
+                <p class="text-[8px] text-slate-400 mt-0.5">Симулятор ударов и обучалка</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3 text-[10px] md:text-xs">
+            <div class="bg-slate-800 px-3 py-1.5 rounded border border-slate-600">
+                СЧЕТ: <span id="score-val" class="text-green-400">0</span>
+            </div>
+            <div class="bg-slate-800 px-3 py-1.5 rounded border border-slate-600">
+                СЕРИЯ: <span id="streak-val" class="text-amber-400">0</span>
+            </div>
+            <button id="sound-toggle-btn" class="bg-slate-700 hover:bg-slate-600 px-2.5 py-1.5 rounded text-white border border-slate-500 transition active:scale-95">🔊</button>
+        </div>
+    </header>
+
+    <main class="w-full max-w-4xl flex-grow flex flex-col items-center justify-center relative bg-slate-950 border-4 border-slate-700 rounded-lg shadow-2xl p-2 overflow-hidden min-h-[420px] md:min-h-[500px]">
+
+        <!-- Main Canvas -->
+        <div class="relative w-full flex justify-center items-center">
+            <canvas id="gameCanvas" width="600" height="400" class="w-full max-w-[600px] h-auto bg-emerald-800 rounded border-2 border-emerald-950 pixelated shadow-inner cursor-crosshair"></canvas>
+            
+            <!-- Tutorial Overlay Dialog -->
+            <div id="tutorial-box" class="absolute inset-0 bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-20 rounded hidden">
+                <div class="bg-slate-800 border-4 border-yellow-500 p-6 rounded-lg max-w-md shadow-2xl flex flex-col gap-4">
+                    <h2 id="tut-title" class="text-xs md:text-sm text-yellow-400 leading-relaxed">ШАГ ОБУЧЕНИЯ</h2>
+                    <p id="tut-desc" class="text-[9px] md:text-[10px] text-slate-300 leading-relaxed">Инструкция...</p>
+                    <div class="flex justify-between items-center mt-2">
+                        <span id="tut-step-indicator" class="text-[8px] text-slate-400">Шаг 1 из 4</span>
+                        <button id="tut-next-btn" class="bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold px-4 py-2 text-[10px] rounded border-2 border-yellow-600 shadow transition active:scale-95">ДАЛЕЕ</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Message Notification Overlay -->
+            <div id="msg-banner" class="absolute top-6 bg-slate-900/95 border-2 border-slate-600 px-6 py-2 rounded-lg text-center z-10 pointer-events-none transition-all duration-300 opacity-0 transform -translate-y-4 shadow-xl">
+                <span id="msg-text" class="text-xs md:text-sm font-bold text-yellow-400">ГОЛ!</span>
+            </div>
+        </div>
+
+        <div class="w-full max-w-[600px] mt-3 flex flex-col gap-2.5 bg-slate-900 p-3 rounded border border-slate-800">
+            <!-- Power & Curve Meters -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- Power Meter -->
+                <div class="flex flex-col gap-1">
+                    <div class="flex justify-between text-[9px] text-slate-400">
+                        <span>ШКАЛА СИЛЫ (100% = Риск вылета!)</span>
+                        <span id="power-pct">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-950 h-3 rounded-full border border-slate-700 overflow-hidden relative p-0.5">
+                        <div id="power-bar" class="bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 h-full rounded-full w-0 transition-all duration-75"></div>
+                    </div>
+                </div>
+                <!-- Curve / Swerve Meter -->
+                <div class="flex flex-col gap-1">
+                    <div class="flex justify-between text-[9px] text-slate-400">
+                        <span>КРУЧЕНИЕ (A/D или Стрелки)</span>
+                        <span id="curve-val">ЦЕНТР</span>
+                    </div>
+                    <div class="w-full bg-slate-950 h-3 rounded-full border border-slate-700 overflow-hidden relative flex items-center px-1">
+                        <div class="w-full h-1 bg-slate-800 relative">
+                            <div id="curve-indicator" class="absolute top-1/2 -translate-y-1/2 left-1/2 w-2 h-4 bg-cyan-400 rounded-sm transition-all duration-75 -translate-x-1/2 shadow"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-wrap gap-2 justify-between items-center pt-1">
+                <div class="flex gap-2">
+                    <button id="shoot-btn" class="bg-green-600 hover:bg-green-500 text-white font-bold px-4 py-2.5 rounded text-[10px] border-2 border-green-700 shadow transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                        🚀 УДАР!
+                    </button>
+                    <button id="hold-charge-btn" class="bg-amber-600 hover:bg-amber-500 text-white font-bold px-4 py-2.5 rounded text-[10px] border-2 border-amber-700 shadow transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                        ⚡ УДЕРЖИВАТЬ СИЛУ
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <button id="tutorial-btn" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2.5 rounded text-[10px] border-2 border-blue-700 shadow transition active:scale-95">
+                        📖 ОБУЧЕНИЕ
+                    </button>
+                    <button id="reset-btn" class="bg-rose-600 hover:bg-rose-500 text-white px-3 py-2.5 rounded text-[10px] border-2 border-rose-700 shadow transition active:scale-95">
+                        🔄 СБРОС
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="w-full max-w-4xl text-center py-2 text-[8px] md:text-[9px] text-slate-400">
+        💡 Кликните в ворота для точного прицела. При 100% силе мяч может улететь выше ворот или в перекладину!
+    </footer>
+
+    <script>
+        // Web Audio API Synthesizer for Retro SFX
+        class SoundFX {
+            constructor() {
+                this.muted = false;
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+            playBeep(freq, type, duration) {
+                if (this.muted) return;
+                this.init();
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type || 'sine';
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e) {}
+            }
+            playKick() {
+                if (this.muted) return;
+                this.init();
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.25);
+                    gain.gain.setValueAtTime(0.35, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.25);
+                } catch(e) {}
+            }
+            playCrossbar() {
+                if (this.muted) return;
+                this.init();
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.2);
+                    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.2);
+                } catch(e) {}
+            }
+            playGoal() {
+                if (this.muted) return;
+                this.init();
+                setTimeout(() => this.playBeep(440, 'square', 0.15), 0);
+                setTimeout(() => this.playBeep(554, 'square', 0.15), 150);
+                setTimeout(() => this.playBeep(659, 'square', 0.3), 300);
+            }
+            playSave() {
+                if (this.muted) return;
+                this.init();
+                setTimeout(() => this.playBeep(180, 'sawtooth', 0.2), 0);
+                setTimeout(() => this.playBeep(110, 'sawtooth', 0.3), 150);
+            }
+        }
+
+        const sfx = new SoundFX();
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const STATE = {
+            IDLE: 0,
+            CHARGING: 1,
+            SHOOTING: 2,
+            RESULT: 3,
+            TUTORIAL: 4
+        };
+
+        let gameState = STATE.IDLE;
+        let score = 0;
+        let streak = 0;
+        let multiplier = 1;
+
+        // Goal dimensions
+        const goal = {
+            x: 100,
+            y: 70,
+            width: 400,
+            height: 170
+        };
+
+        // Ball initial position (penalty spot)
+        const initialBall = {
+            x: 300,
+            y: 350,
+            radius: 9
+        };
+
+        let ball = { ...initialBall };
+        
+        let targetAim = { x: 300, y: 150 }; 
+        let startFlightPos = { x: 300, y: 350 };
+        let endFlightPos = { x: 300, y: 150 };
+
+        let power = 0; // 0 to 100
+        let isChargingPower = false;
+        let curve = 0; // -50 to 50
+        let ballFlightProgress = 0;
+
+        let gk = {
+            x: 300,
+            y: 135,
+            width: 48,
+            height: 60,
+            startX: 300,
+            startY: 135,
+            targetX: 300,
+            targetY: 135,
+            diveState: 'stand',
+            diveProgress: 0
+        };
+
+        let particles = [];
+
+        const tutorialSteps = [
+            {
+                title: "ДОБРО ПОЖАЛОВАТЬ В ПЕНАЛЬТИ ПРО!",
+                desc: "Это симулятор пробития пенальти. Ваша задача — забивать голы хитрому вратарю ИИ, контролируя прицел, силу и закрутку."
+            },
+            {
+                title: "ШАГ 1: ТОЧНЫЙ ПРИЦЕЛ",
+                desc: "Кликните в любую точку внутри ворот. Красный прицел покажет, куда полетит мяч."
+            },
+            {
+                title: "ШАГ 2: СИЛА И РИСК 100%",
+                desc: "Удерживайте кнопку 'УДЕРЖИВАТЬ СИЛУ' или Пробел. Будьте осторожны: если шкала дойдет до 100%, удар получится слишком сильным, и мяч может улететь выше ворот или в перекладину!"
+            },
+            {
+                title: "ШАГ 3: КРУЧЕНИЕ И ВРАТАРЬ",
+                desc: "Используйте клавиши A/D или Стрелки для закрутки мяча. Вратарь попытается предугадать удар и сделать сейв!"
+            }
+        ];
+        let currentTutorialStep = 0;
+
+        // UI elements
+        const scoreValEl = document.getElementById('score-val');
+        const streakValEl = document.getElementById('streak-val');
+        const powerBarEl = document.getElementById('power-bar');
+        const powerPctEl = document.getElementById('power-pct');
+        const curveIndicatorEl = document.getElementById('curve-indicator');
+        const curveValEl = document.getElementById('curve-val');
+        const shootBtn = document.getElementById('shoot-btn');
+        const holdChargeBtn = document.getElementById('hold-charge-btn');
+        const tutorialBox = document.getElementById('tutorial-box');
+        const tutTitle = document.getElementById('tut-title');
+        const tutDesc = document.getElementById('tut-desc');
+        const tutStepIndicator = document.getElementById('tut-step-indicator');
+        const tutNextBtn = document.getElementById('tut-next-btn');
+        const msgBanner = document.getElementById('msg-banner');
+        const msgText = document.getElementById('msg-text');
+        const soundToggleBtn = document.getElementById('sound-toggle-btn');
+
+        soundToggleBtn.addEventListener('click', () => {
+            sfx.muted = !sfx.muted;
+            soundToggleBtn.textContent = sfx.muted ? '🔇' : '🔊';
+        });
+
+        function getCanvasCoordinates(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+            const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        canvas.addEventListener('click', (e) => {
+            if (gameState === STATE.RESULT || gameState === STATE.TUTORIAL) return;
+            const pos = getCanvasCoordinates(e);
+
+            targetAim.x = Math.max(50, Math.min(canvas.width - 50, pos.x));
+            targetAim.y = Math.max(30, Math.min(canvas.height - 100, pos.y));
+            sfx.playBeep(520, 'sine', 0.04);
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && gameState === STATE.IDLE) {
+                e.preventDefault();
+                startCharging();
+            }
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+                curve = Math.max(-50, curve - 15);
+                updateCurveUI();
+            }
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+                curve = Math.min(50, curve + 15);
+                updateCurveUI();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' && isChargingPower) {
+                e.preventDefault();
+                executeShot();
+            }
+        });
+
+        holdChargeBtn.addEventListener('mousedown', () => {
+            if (gameState === STATE.IDLE) startCharging();
+        });
+        holdChargeBtn.addEventListener('mouseup', () => {
+            if (isChargingPower) executeShot();
+        });
+        holdChargeBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (gameState === STATE.IDLE) startCharging();
+        });
+        holdChargeBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isChargingPower) executeShot();
+        });
+
+        shootBtn.addEventListener('click', () => {
+            if (gameState === STATE.IDLE) {
+                power = 65;
+                executeShot();
+            }
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            score = 0;
+            streak = 0;
+            multiplier = 1;
+            updateStatsUI();
+            resetRound();
+            showBanner("СИМУЛЯТОР СБРОШЕН", "text-blue-400");
+        });
+
+        document.getElementById('tutorial-btn').addEventListener('click', () => {
+            openTutorial();
+        });
+
+        tutNextBtn.addEventListener('click', () => {
+            currentTutorialStep++;
+            if (currentTutorialStep >= tutorialSteps.length) {
+                closeTutorial();
+            } else {
+                updateTutorialContent();
+            }
+        });
+
+        function openTutorial() {
+            gameState = STATE.TUTORIAL;
+            currentTutorialStep = 0;
+            updateTutorialContent();
+            tutorialBox.classList.remove('hidden');
+        }
+
+        function closeTutorial() {
+            tutorialBox.classList.add('hidden');
+            gameState = STATE.IDLE;
+        }
+
+        function updateTutorialContent() {
+            const step = tutorialSteps[currentTutorialStep];
+            tutTitle.textContent = step.title;
+            tutDesc.textContent = step.desc;
+            tutStepIndicator.textContent = `Шаг ${currentTutorialStep + 1} из ${tutorialSteps.length}`;
+            tutNextBtn.textContent = currentTutorialStep === tutorialSteps.length - 1 ? "ИГРАТЬ!" : "ДАЛЕЕ";
+        }
+
+        function startCharging() {
+            isChargingPower = true;
+            gameState = STATE.CHARGING;
+            power = 15;
+        }
+
+        function executeShot() {
+            if (!isChargingPower) return;
+            isChargingPower = false;
+            gameState = STATE.SHOOTING;
+
+            sfx.playKick();
+
+            startFlightPos = { x: ball.x, y: ball.y };
+            
+            // 100% Power penalty / risk mechanic: Overshoot over goal or crossbar hit
+            if (power >= 98) {
+                // Random chance to hit crossbar or fly entirely over goal
+                let overshotType = Math.random();
+                if (overshotType > 0.45) {
+                    // Fly way over the crossbar
+                    endFlightPos = { x: targetAim.x, y: goal.y - 45 };
+                } else {
+                    // Hit crossbar directly
+                    endFlightPos = { x: targetAim.x, y: goal.y + 2 };
+                }
+            } else {
+                endFlightPos = { x: targetAim.x, y: targetAim.y };
+            }
+
+            ballFlightProgress = 0;
+            triggerGoalkeeperAI();
+        }
+
+        function triggerGoalkeeperAI() {
+            gk.startX = gk.x;
+            gk.startY = gk.y;
+            gk.diveProgress = 0;
+
+            let reactionError = (Math.random() - 0.5) * 40 - (streak * 3);
+            reactionError = Math.max(-60, Math.min(60, reactionError));
+
+            gk.targetX = Math.max(goal.x + 15, Math.min(goal.x + goal.width - 15, endFlightPos.x + reactionError));
+            gk.targetY = Math.max(goal.y + 10, Math.min(goal.y + goal.height - 15, endFlightPos.y));
+
+            let midGoalX = goal.x + goal.width / 2;
+            if (endFlightPos.x < midGoalX - 40) {
+                gk.diveState = (endFlightPos.y < goal.y + 70) ? 'diveTopLeft' : 'diveLeft';
+            } else if (endFlightPos.x > midGoalX + 40) {
+                gk.diveState = (endFlightPos.y < goal.y + 70) ? 'diveTopRight' : 'diveRight';
+            } else {
+                gk.diveState = 'jumpCenter';
+            }
+        }
+
+        function updateCurveUI() {
+            let pct = ((curve + 50) / 100) * 100;
+            curveIndicatorEl.style.left = `${pct}%`;
+            if (curve < -10) curveValEl.textContent = "ВЛЕВО ⬅";
+            else if (curve > 10) curveValEl.textContent = "ВПРАВО ➡";
+            else curveValEl.textContent = "ЦЕНТР";
+        }
+
+        function updateStatsUI() {
+            scoreValEl.textContent = score;
+            streakValEl.textContent = streak;
+        }
+
+        function showBanner(text, colorClass) {
+            msgText.textContent = text;
+            msgText.className = `text-xs md:text-sm font-bold ${colorClass}`;
+            msgBanner.classList.remove('opacity-0', '-translate-y-4');
+            setTimeout(() => {
+                msgBanner.classList.add('opacity-0', '-translate-y-4');
+            }, 1800);
+        }
+
+        function spawnParticles(x, y, color) {
+            for (let i = 0; i < 24; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 7,
+                    vy: (Math.random() - 0.5) * 7,
+                    color: color,
+                    life: 35
+                });
+            }
+        }
+
+        function update() {
+            if (gameState === STATE.CHARGING) {
+                power += 2.8;
+                if (power >= 100) power = 100;
+                powerBarEl.style.width = `${power}%`;
+                powerPctEl.textContent = `${Math.floor(power)}%`;
+            }
+
+            if (gameState === STATE.SHOOTING) {
+                ballFlightProgress += 0.035 + (power / 1000);
+
+                if (ballFlightProgress >= 1) {
+                    ballFlightProgress = 1;
+                    evaluateOutcome();
+                } else {
+                    let t = ballFlightProgress;
+                    let currX = startFlightPos.x + (endFlightPos.x - startFlightPos.x) * t;
+                    let currY = startFlightPos.y + (endFlightPos.y - startFlightPos.y) * t;
+
+                    let curveOffset = Math.sin(t * Math.PI) * (curve * 1.2);
+                    ball.x = currX + curveOffset;
+                    ball.y = currY;
+                    ball.radius = Math.max(3.5, 9 - (t * 5));
+                }
+
+                if (gk.diveState !== 'stand') {
+                    gk.diveProgress += 0.07;
+                    if (gk.diveProgress > 1) gk.diveProgress = 1;
+                    
+                    gk.x = gk.startX + (gk.targetX - gk.startX) * gk.diveProgress;
+                    gk.y = gk.startY + (gk.targetY - gk.startY) * gk.diveProgress;
+                }
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function evaluateOutcome() {
+            gameState = STATE.RESULT;
+
+            // Check if hit crossbar
+            let hitCrossbar = (
+                power >= 98 && 
+                ball.y >= goal.y - 8 && ball.y <= goal.y + 4 &&
+                ball.x >= goal.x - 6 && ball.x <= goal.x + goal.width + 6
+            );
+
+            // Check if flew over bar
+            let flewOver = (ball.y < goal.y);
+
+            let inGoalX = ball.x >= goal.x && ball.x <= goal.x + goal.width;
+            let inGoalY = ball.y >= goal.y && ball.y <= goal.y + goal.height;
+
+            let gkBox = {
+                x: gk.x - gk.width/2 - 8,
+                y: gk.y - gk.height/2 - 8,
+                w: gk.width + 16,
+                h: gk.height + 16
+            };
+
+            let savedByGK = (
+                ball.x >= gkBox.x && ball.x <= gkBox.x + gkBox.w &&
+                ball.y >= gkBox.y && ball.y <= gkBox.y + gkBox.h
+            );
+
+            if (hitCrossbar) {
+                sfx.playCrossbar();
+                streak = 0;
+                updateStatsUI();
+                showBanner("УДАР В ПЕРЕКЛАДИНУ! 💥", "text-amber-400");
+                spawnParticles(ball.x, ball.y, '#f59e0b');
+            } else if (flewOver) {
+                sfx.playSave();
+                streak = 0;
+                updateStatsUI();
+                showBanner("ВЫШЕ ВОРОТ (ПЕРЕБОР СИЛЫ)! ✈️", "text-rose-400");
+                spawnParticles(ball.x, ball.y, '#f43f5e');
+            } else if (savedByGK) {
+                sfx.playSave();
+                streak = 0;
+                updateStatsUI();
+                showBanner("СЕЙВ ВРАТАРЯ! 🧤", "text-rose-400");
+                spawnParticles(ball.x, ball.y, '#f43f5e');
+            } else if (!inGoalX || !inGoalY) {
+                sfx.playSave();
+                streak = 0;
+                updateStatsUI();
+                showBanner("МИМО ВОРОТ! ❌", "text-amber-400");
+                spawnParticles(ball.x, ball.y, '#fbbf24');
+            } else {
+                sfx.playGoal();
+                streak++;
+                multiplier = Math.min(5, 1 + Math.floor(streak / 3));
+                score += 100 * multiplier;
+                updateStatsUI();
+                showBanner(`ГОЛ! +${100 * multiplier} (x${multiplier}) ⚽`, "text-green-400");
+                spawnParticles(ball.x, ball.y, '#22c55e');
+            }
+
+            setTimeout(() => {
+                resetRound();
+            }, 2000);
+        }
+
+        function resetRound() {
+            gameState = STATE.IDLE;
+            ball = { ...initialBall };
+            power = 0;
+            powerBarEl.style.width = '0%';
+            powerPctEl.textContent = '0%';
+            curve = 0;
+            updateCurveUI();
+            targetAim = { x: 300, y: 150 };
+            gk.x = 300;
+            gk.y = 135;
+            gk.startX = 300;
+            gk.startY = 135;
+            gk.diveState = 'stand';
+            gk.diveProgress = 0;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Pitch & Grass stripes
+            ctx.fillStyle = '#166534';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#15803d';
+            for (let y = 180; y < canvas.height; y += 40) {
+                ctx.fillRect(0, y, canvas.width, 20);
+            }
+
+            // Penalty Spot
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(initialBall.x - 2, initialBall.y - 2, 4, 4);
+
+            // Goal Net Grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 1;
+            for (let nx = goal.x; nx <= goal.x + goal.width; nx += 20) {
+                ctx.beginPath();
+                ctx.moveTo(nx, goal.y);
+                ctx.lineTo(nx, goal.y + goal.height);
+                ctx.stroke();
+            }
+            for (let ny = goal.y; ny <= goal.y + goal.height; ny += 20) {
+                ctx.beginPath();
+                ctx.moveTo(goal.x, ny);
+                ctx.lineTo(goal.x + goal.width, ny);
+                ctx.stroke();
+            }
+
+            // Goal Posts & Crossbar
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(goal.x - 6, goal.y, 8, goal.height + 6);
+            ctx.fillRect(goal.x + goal.width - 2, goal.y, 8, goal.height + 6);
+            ctx.fillRect(goal.x - 6, goal.y - 6, goal.width + 12, 8);
+
+            // Draw Pixel Goalkeeper
+            let gkx = Math.floor(gk.x - gk.width/2);
+            let gky = Math.floor(gk.y - gk.height/2);
+
+            ctx.fillStyle = '#2563eb';
+            ctx.fillRect(gkx + 10, gky + 12, gk.width - 20, gk.height - 22);
+
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(gkx + 12, gky + 40, gk.width - 24, 12);
+            ctx.fillStyle = '#eab308';
+            ctx.fillRect(gkx + 12, gky + 52, 8, 8);
+            ctx.fillRect(gkx + gk.width - 20, gky + 52, 8, 8);
+
+            ctx.fillStyle = '#fde047';
+            ctx.fillRect(gkx + 12, gky, 24, 16);
+            ctx.fillStyle = '#dc2626';
+            ctx.fillRect(gkx + 10, gky - 4, 28, 6);
+
+            ctx.fillStyle = '#ffffff';
+            if (gk.diveState === 'diveLeft' || gk.diveState === 'diveTopLeft') {
+                ctx.fillRect(gkx - 12, gky + 12, 16, 12);
+                ctx.fillRect(gkx + 8, gky + 25, 8, 8);
+            } else if (gk.diveState === 'diveRight' || gk.diveState === 'diveTopRight') {
+                ctx.fillRect(gkx + gk.width - 4, gky + 12, 16, 12);
+                ctx.fillRect(gkx + 22, gky + 25, 8, 8);
+            } else {
+                ctx.fillRect(gkx - 4, gky + 20, 10, 10);
+                ctx.fillRect(gkx + gk.width - 6, gky + 20, 10, 10);
+            }
+
+            // Draw Aim Marker
+            if (gameState === STATE.IDLE || gameState === STATE.CHARGING) {
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(targetAim.x, targetAim.y, 14, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(targetAim.x - 18, targetAim.y); ctx.lineTo(targetAim.x + 18, targetAim.y);
+                ctx.moveTo(targetAim.x, targetAim.y - 18); ctx.lineTo(targetAim.x, targetAim.y + 18);
+                ctx.stroke();
+
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+                ctx.fill();
+            }
+
+            // Draw Ball
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Particles
+            for (let p of particles) {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 3.5, 3.5);
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onload = () => {
+            updateStatsUI();
+            updateCurveUI();
+            requestAnimationFrame(gameLoop);
+            setTimeout(() => {
+                openTutorial();
+            }, 500);
+        };
+    </script>
+</body>
+</html>
